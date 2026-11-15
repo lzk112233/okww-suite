@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# 本地备份（改配置前的原件）
+_backup_*/
+
+# 调试产物（截图、输出中转文件、临时脚本）
+_*.png
+_*_out.txt
+_shot.ps1
+_selftest*.py
+tmp_*
+
+# 日志
+*.log
+logs/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# 凭据（绝不提交）
+.keys.json
+*.token
+credentials*
