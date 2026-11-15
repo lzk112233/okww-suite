@@ -272,3 +272,116 @@ if not st.ensure_foreground(hwnd):
   鸣潮设成「窗口化」或「无边框窗口」才有效。
 - 抢不到时的症状：能截图（BitBlt 走的是窗口句柄，不需要前台），但点击/按键全丢。
   这是**故意的**：宁可不动，也不要把键洒到别的窗口。
+
+---
+
+## 11. 另一条路：直接切成 PyDirect（零补丁）
+
+上面 §3 到 §10 是**打补丁**的路子 —— 保留 `PostMessageInteraction` 这个类，把它
+六个方法换成真前台。如果你的目的只是"别发那条伪造消息"，ok-ww **自己就带着**一条
+更干净的路：换成 `PyDirectInteraction`。零补丁、零 hook、不碰 `sitecustomize`。
+
+### 11.1 改哪两处
+
+```
+working\config.py:219-221
+    'hwnd_class': 'UnrealWindow',
+    'interaction': 'PyDirect',        # 原为 'PostMessage'
+
+working\configs\devices.json:9
+    "interaction": "PyDirect"         # 原为 "PostMessage"
+```
+
+**两处都要改，缺一不可。** `DeviceManager.py:85-105` 的逻辑是先用
+`windows_capture_config['interaction']` 赋给 `selected_interaction`，再拿
+`config['interaction']`（devices.json 里持久化的那份）来比对覆盖。因为 config 里
+是标量不是 list，只有 saved 值跟它字面相等才会生效 —— 只改 devices.json，它跟
+config 里的 `PostMessage` 对不上，等于没改。
+
+### 11.2 `PyDirectInteraction` 是什么
+
+`ok\device\interaction_methods\pydirect.py`，162 行，逐一读过：
+
+- 零 `PostMessage`、零 `WM_ACTIVATE`、零 `SetForegroundWindow`
+- 全部走 `pydirectinput.keyDown/keyUp`、`mouse.move/click/wheel`、`user32.mouse_event`
+- `on_run()` 里 `self.hwnd_window.bring_to_front()` —— 任务开始时自己把游戏带前台
+- 每个动作前 `if not self.clickable(): logger.error(...); return`
+  （`:40-42 :55-57 :65-67 :92-93 :121-123 :137-139 :152-154`）
+- `__init__` 里 `if not is_admin(): logger.error("You must be an admin ...")`
+
+### 11.3 启动
+
+```powershell
+$py   = "C:\Users\<你>\AppData\Local\ok-ww\data\apps\ok-ww\python\python.exe"
+$work = "C:\Users\<你>\AppData\Local\ok-ww\data\apps\ok-ww\working"
+$line = '/c start "" /d "' + $work + '" "' + $py + '" main.py -t DailyTask'
+Start-Process -FilePath "cmd.exe" -ArgumentList $line -Verb RunAs
+```
+
+**必须用 `cmd /c start` 把 python 从当前 shell 的进程树里摘出去。** 直接
+`Start-Process python ...` 会在 pwsh 命令结束时被连带收走，症状是日志里 34 秒后出现
+`MainWindow:Window closed exit_event.is not set False` 然后自退 —— 很容易误判成
+ok-ww 自己的 bug。
+
+`-h/--headless` 在本机不产出任何日志行（进程起来了，日志 0 增长），不能用来验证。
+
+### 11.4 怎么确认真的换了
+
+两个地方，都很好认：
+
+1. 主界面顶栏一行：`鸣潮  2560x1440  WGC  PyDirect`
+2. 日志前缀变了 —— 从 `DailyTask:left_click <名字> (x,y)` 变成
+   `pydirect:left_click (x,y)`，后者是 `pydirect.py:130` 的 `logger.info(f"left_click {x, y}")`
+
+实测一轮：
+
+```
+2026-11-15 10:47:38,754 INFO pydirect:left_click (2388, 1325)
+2026-11-15 10:47:51,178 INFO pydirect:left_click (1280, 720)
+2026-11-15 10:47:51,399 INFO TacetTask:进入战斗，控物状态：None
+```
+
+141 次 `pydirect:` 操作，`not clickable` 拒绝 **0 次** —— 前台全程是游戏。
+
+### 11.5 代价
+
+- **独占前台**。任务跑起来这台机器就用不了，切走它就不发（不是乱发）。
+- 每次启动要 UAC。
+- `config.py` 在 `repo` 里，ok-ww 自动更新会把它重置回 `PostMessage`。要长期稳就用
+  §3 的补丁版（`sitecustomize.py` 在 `site-packages` 里，更新不覆盖），或者每次更新
+  后重改一次。
+
+---
+
+## 12. 前提：UIPI —— 不提权，消息发不进游戏
+
+这条不是可选项，是硬门槛。鸣潮的 `Client-Win64-Shipping.exe` 是**以管理员权限**跑的
+（高完整性级别）。普通权限进程的 `SendInput` 和 `PostMessage` 会被系统**静默丢弃，
+不报错、不返回失败**。
+
+实测进程完整性：
+
+```
+explorer.exe                  普通权限
+Client-Win64-Shipping.exe     提权(管理员)
+python.exe                    普通权限
+IsAdmin = False
+```
+
+同一套测试（截图差分判反应，阈值 2%，噪声基线 0.5~0.9%）：
+
+| 测试 | 普通权限 | 管理员 |
+|---|---|---|
+| F1 | mean=1.53 / 0.60% 没反应 | mean=80.51 / **81.35%** 有反应 |
+| Esc | mean=1.43 / 0.53% 没反应 | mean=82.02 / **79.86%** 有反应 |
+| W 按住 500ms | mean=1.53 / 0.54% 没反应 | mean=18.49 / **31.22%** 有反应 |
+| 鼠标移动 +200px | mean=1.45 / 0.72% 没反应 | mean=24.63 / **24.56%** 有反应 |
+
+验证脚本 `tools\elev_test.py`：把同一套动作在提权前后各跑一遍，结果是存在
+`_elev_out.txt`（提权进程的 stdout 抓不到，只能自己落盘再读）。
+
+顺带解释一个现象：ok-ww 的 `app.json` 里写着 `"admin": true` —— 不是它想提权，
+是不提权连消息都进不去。
+
+`SetForegroundWindow` 不受 UIPI 限制，所以**切前台能成而点不动**，这个组合最容易让人
+以为是前台代码写错了。实际是权限。
