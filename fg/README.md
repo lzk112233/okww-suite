@@ -109,6 +109,9 @@ ok-ww 调 post_message.py
 
 ## 4. 上手
 
+> **只想用**：`setup.ps1` → 双击 `run.bat`。完整步骤见 [../QUICKSTART.md](../QUICKSTART.md)。
+> 下面两条是**给补丁路线**（`okww_fg` 注入）用的，不是 PyDirect 路线。
+
 ```powershell
 # 独立跑（会打印 install 结果）
 $env:PYTHONPATH = "D:\ai\dfy\okww-fg;D:\ai\dfy\okww-stealth"

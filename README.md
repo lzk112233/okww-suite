@@ -216,16 +216,36 @@ RELEASE aa 04 00 ae
 
 ## 五、快速上手
 
-**前台模式**（推荐先跑这个）：
+> 只想用、不想看原理 → 直接看 [**QUICKSTART.md**](QUICKSTART.md)，两步搞定。
+
+**第一次**（改配置，自动备份，只做一次）：
 
 ```powershell
-$py   = "C:\Users\<你>\AppData\Local\ok-ww\data\apps\ok-ww\python\python.exe"
-$work = "C:\Users\<你>\AppData\Local\ok-ww\data\apps\ok-ww\working"
-# 必须先改 config.py 与 devices.json 的 interaction 为 PyDirect
+cd fg
+powershell -ExecutionPolicy Bypass -File setup.ps1          # 改两处 interaction 为 PyDirect
+powershell -ExecutionPolicy Bypass -File setup.ps1 -Check   # 只看会改什么
+```
+
+**日常**（自带 UAC 提权）：
+
+```bat
+fg\run.bat                  :: 打开主界面
+fg\run.bat daily            :: 跑每日任务
+fg\run.bat AutoCombatTask   :: 跑任意任务
+```
+
+`setup.ps1` 会先备份到 `%LOCALAPPDATA%\ok-ww\_backup_<时间戳>\`，改完自己验证一遍；`run.bat` 会检查是否已是 PyDirect、是否管理员，没问题才启动。
+
+**手改也行**（`run.bat` 就是替你干这两件事）：
+
+```powershell
+$py   = "$env:LOCALAPPDATA\ok-ww\data\apps\ok-ww\python\python.exe"
+$work = "$env:LOCALAPPDATA\ok-ww\data\apps\ok-ww\working"
+# 先把 working\config.py:221 与 working\configs\devices.json 的 interaction 改成 PyDirect
 Start-Process cmd.exe -ArgumentList ('/c start "" /d "' + $work + '" "' + $py + '" main.py') -Verb RunAs
 ```
 
-**注意**：必须用 `cmd /c start` 让 python 脱离父进程树。直接 `Start-Process` 会在命令结束时被连带收走，症状是 34 秒后日志出现 `MainWindow:Window closed exit_event.is not set False` 然后自退。
+**注意**：必须用 `cmd /c start`（或 `run.bat` 里的 `start ""`）让 python 脱离父进程树。直接 `Start-Process` 会在命令结束时被连带收走，症状是 34 秒后日志出现 `MainWindow:Window closed exit_event.is not set False` 然后自退。
 
 **验证工具**（`fg/tools/`）：
 
