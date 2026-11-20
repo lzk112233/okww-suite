@@ -14,7 +14,7 @@ ok-ww 原来用 `PostMessage` 往游戏窗口"塞"假键鼠消息，而且**每�
 
 前提：ok-ww 已经装好，能正常打开（默认在 `%LOCALAPPDATA%\ok-ww`）。
 
-打开 PowerShell，进到 `fg` 目录，跑：
+在 `fg` 目录里**按住 Shift 右键 → 在此处打开 PowerShell 窗口**，跑：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File setup.ps1
@@ -33,6 +33,22 @@ powershell -ExecutionPolicy Bypass -File setup.ps1
 powershell -ExecutionPolicy Bypass -File setup.ps1 -Check
 ```
 
+### 可选：让以后双击不再问 UAC
+
+以**管理员**身份开一个 PowerShell（右键 → 以管理员身份运行），进到 `fg` 目录，跑：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup.ps1 -InstallTask
+```
+
+它注册两个计划任务（`okww-suite-gui` / `okww-suite-daily`，都是以最高权限运行）。之后 `run.bat` 会优先用它们启动，**不再弹 UAC**。
+
+不想要了：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup.ps1 -RemoveTask
+```
+
 ---
 
 ## 第二步：日常使用
@@ -40,9 +56,13 @@ powershell -ExecutionPolicy Bypass -File setup.ps1 -Check
 **双击 `run.bat`**。
 
 - 会弹 UAC，点"是" —— ok-ww 必须以管理员运行，否则 `SendInput` 被系统直接丢掉（游戏是管理员权限跑的，见 README §12 UIPI）
+  - 装了计划任务之后就不弹了
+- **窗口会停留一会儿**：它最多等 24 秒确认 `python.exe` 真的起来了，然后打一行 `running: python.exe <pid>` 再自己关掉。这期间别急着关它
 - 不带参数 = 打开 ok-ww 主界面
 - `run.bat daily` = 直接跑每日任务
 - `run.bat AutoCombatTask` = 跑指定任务
+
+如果 UAC 点了"否"，或没起来，**窗口会停住并告诉你原因**，不会再一闪就没。
 
 ---
 
@@ -75,7 +95,7 @@ pydirect:left_click (2388, 1325)
 
 2. **ok-ww 自动更新会把 `config.py` 覆盖回去。** 发现顶栏变回 `PostMessage`，重跑 `setup.ps1` 就行。
 
-3. **每次启动要点一次 UAC。** 不想点可以建个"以最高权限运行"的计划任务，但那会在系统里留一条计划任务记录，反而多一个特征，不建议。
+3. **每次启动要点一次 UAC。** 嫌烦就跑一次 `setup.ps1 -InstallTask`（管理员），之后不再弹；代价是系统里留两条计划任务记录（也可以 `-RemoveTask` 删掉）。
 
 ---
 
@@ -83,6 +103,9 @@ pydirect:left_click (2388, 1325)
 
 | 现象 | 原因 | 怎么办 |
 |---|---|---|
+| 双击 `run.bat` 窗口一闪就没了，什么都没发生 | 需要管理员，UAC 要么没弹要么被拒 | 右键 `run.bat` → **以管理员身份运行**；或跑一次 `setup.ps1 -InstallTask` 免掉 UAC |
+| 双击后停在 `elevation failed or was cancelled` | UAC 被你点了"否" | 重新双击，这次点"是" |
+| 双击后停很久在 `waiting for python.exe ...` | ok-ww 启动慢（首次要初始化 OCR，十几秒） | 等到 24 秒上限；还没起来会打印日志路径 |
 | 能截图，但点击/按键没反应 | 不是管理员 | 用 `run.bat` 启动，UAC 点"是" |
 | 顶栏看不到 `PyDirect` | 配置没改或又被更新覆盖 | 重跑 `setup.ps1`，重启 ok-ww |
 | 起来三十秒就自己关了 | 启动它的控制台被关，进程被连带收走 | 用 `run.bat`（里面 `start ""` 已经脱离父进程） |
